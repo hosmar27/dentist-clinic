@@ -24,19 +24,29 @@
                 </tr>
             </thead>
             <tbody>
-                @foreach($patients as $patient)
+                @foreach($patients as $p)
                 <tr>
-                    <td>{{ $patient->id }}</td>
-                    <td>{{ $patient->name }}</td>
-                    <td>{{ $patient->cpf }}</td>
-                    <td>{{ $patient->phone }}</td>
+                    <td>{{ $p->id }}</td>
+                    <td>{{ $p->name }}</td>
+                    <td>{{ $p->cpf }}</td>
+                    <td>{{ $p->phone }}</td>
                     <td>
-                        <a href="/patients/edit/{{ $patient->id }}">
+                        <a href="/appointments/new?patient_id={{ $p->id }}">
+                            <button type="button" style="background-color: #2f855a !important;">Book Appointment</button>
+                        </a>
+
+                        <a href="/patients/edit/{{ $p->id }}">
                             <button type="button">Edit</button>
                         </a>
-                        <a href="/appointments/new?patient_id={{ $patient->id }}">
-                            <button type="button" style="margin-left: 5px;">Schedule</button>
-                        </a>
+
+                        <form action="/patients/delete/{{ $p->id }}" method="POST" style="display:inline">
+                            @csrf
+                            <button type="submit"
+                                    onclick="return confirm('Are you sure you want to delete patient {{ $p->name }}? This will permanently remove all their associated appointments.')"
+                                    style="background-color: #c53030 !important;">
+                                Delete
+                            </button>
+                        </form>
                     </td>
                 </tr>
                 @endforeach

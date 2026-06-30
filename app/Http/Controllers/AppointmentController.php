@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Appointment;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
 class AppointmentController extends Controller
@@ -13,8 +14,10 @@ class AppointmentController extends Controller
         $query = Appointment::with(['patient', 'dentist', 'statu'])->orderBy('appointment_date', 'desc');
 
         if ($request->filled('status_id')) {
-            $query->where('id', $request->status_id);
+            // CORREÇÃO: Filtrar pela coluna correta 'status_id', não 'id'
+            $query->where('status_id', $request->status_id);
         }
+
         $appointments = $query->get();
         $statuses = DB::table('status')->get();
 
@@ -24,129 +27,174 @@ class AppointmentController extends Controller
 
         return view('appointments', [
             'appointments' => $appointments,
-            'statuses'     => $statuses // Passando os status para a view
+            'statuses' => $statuses,
         ]);
     }
 
     public function create()
     {
-        // Buscar usuários com as respectivas flags
         $patients = DB::table('users')->orderBy('name')->where('is_patient', 1)->get();
         $dentists = DB::table('users')->orderBy('name')->where('is_dentist', 1)->get();
         $statuses = DB::table('status')->get();
 
-        // Corrigido para apontar para a view do formulário (sem a barra inicial)
         return view('appointment-form', [
             'appointment' => null,
             'patients' => $patients,
             'dentists' => $dentists,
-            'statuses' => $statuses
+            'statuses' => $statuses,
         ]);
     }
 
     public function store(Request $request)
     {
-        $data = $request->only(['patient_id', 'dentist_id', 'appointment_date', 'status_id']);
+        $user = Auth::user();
 
-        if ($request->wantsJson()) {
-            $appointment = Appointment::create($data);
+        $data = $request->only(['patient_id', 'dentist_id', 'appointment_date']);
 
-            return response()->json($appointment, 201);
+        // REGRA DE NEGÓCIO: Se for paciente, ignoramos o que vem do form e forçamos o ID dele
+        if ($user->is_patient == 1) {
+            $data['patient_id'] = $user->id;
         }
+
+        // Força o status inicial (Ex: 1 = Scheduled)
+        $data['status_id'] = 1;
 
         DB::table('appointments')->insert(array_merge($data, [
             'created_at' => now(),
             'updated_at' => now(),
         ]));
 
-        return redirect('/appointments');
+        if ($user->is_admin == 1) {
+            return redirect('/appointments');
+        } elseif ($user->is_dentist == 1) {
+            return redirect('/dentist/appointments');
+        } else {
+            return redirect('/patient/appointments');
+        }
     }
 
     public function show(Request $request, $id)
     {
-        $appointment = DB::table('appointments')->where('id', $id)->first();
+        // CORREÇÃO: Usando o Model para carregar o relacionamento 'statu'
+        $appointment = Appointment::with('statu')->find($id);
+
         $patients = DB::table('users')->orderBy('name')->where('is_patient', 1)->get();
         $dentists = DB::table('users')->orderBy('name')->where('is_dentist', 1)->get();
         $statuses = DB::table('status')->get();
 
         return view('appointment-form', [
-            'appointment' => $appointment, 
-            'patients'    => $patients, 
-            'dentists'    => $dentists,
-            'status'      => $statuses
+            'appointment' => $appointment,
+            'patients' => $patients,
+            'dentists' => $dentists,
+            'statuses' => $statuses, // CORREÇÃO: Estava 'status', alterado para 'statuses' para bater com a View
         ]);
     }
 
     public function edit($id)
     {
-        $appointment = DB::table('appointments')->where('id', $id)->first();
+        // CORREÇÃO: Usando o Model para carregar o relacionamento 'statu'
+        $appointment = Appointment::with('statu')->find($id);
+
         $patients = DB::table('users')->orderBy('name')->where('is_patient', 1)->get();
-        
-        // Corrigido para a tabela 'users'
         $dentists = DB::table('users')->orderBy('name')->where('is_dentist', 1)->get();
         $statuses = DB::table('status')->get();
 
         return view('appointment-form', [
-            'appointment' => $appointment, // Corrigido: agora envia os dados reais em vez de null
+            'appointment' => $appointment,
             'patients' => $patients,
             'dentists' => $dentists,
-            'statuses' => $statuses
+            'statuses' => $statuses,
         ]);
     }
 
     public function update(Request $request, $id)
     {
-        $data = $request->only(['patient_id', 'dentist_id', 'appointment_date', 'status']);
+        $user = Auth::user();
+        $data = [];
 
-        /* Se for utilizar a API via JSON futuramente, basta descomentar
-        if ($request->wantsJson()) {
-            $appointment = Appointment::findOrFail($id);
-            $appointment->update($data);
-
-            return response()->json($appointment);
+        if ($user->is_admin == 1) {
+            // ADMIN: Pode atualizar tudo (Paciente, Dentista, Data e Status)
+            $data = $request->only(['patient_id', 'dentist_id', 'appointment_date']);
+            if ($request->has('status_id')) {
+                $data['status_id'] = $request->status_id;
+            }
+        } elseif ($user->is_dentist == 1) {
+            // DENTISTA: Só pode atualizar Data e Status
+            $data = $request->only(['appointment_date']);
+            if ($request->has('status_id')) {
+                $data['status_id'] = $request->status_id;
+            }
+        } else {
+            // PACIENTE: Só pode CANCELAR
+            if ($request->action === 'cancel') {
+                $cancelledStatus = DB::table('status')->whereRaw('LOWER(status_name) = ?', ['cancelled'])->first();
+                if ($cancelledStatus) {
+                    $data['status_id'] = $cancelledStatus->id;
+                }
+            }
         }
-        */
 
-        DB::table('appointments')->where('id', $id)->update(array_merge($data, [
-            'updated_at' => now(),
-        ]));
+        // Só faz o update se houver dados permitidos para alterar
+        if (! empty($data)) {
+            DB::table('appointments')->where('id', $id)->update(array_merge($data, [
+                'updated_at' => now(),
+            ]));
+        }
 
-        return redirect('/appointments');
+        if ($user->is_admin == 1) {
+            return redirect('/appointments');
+        } elseif ($user->is_dentist == 1) {
+            return redirect('/dentist/appointments');
+        } else {
+            return redirect('/patient/appointments');
+        }
     }
 
     public function destroy(Request $request, $id)
     {
-        /* Se for utilizar a API via JSON futuramente, basta descomentar
-        if ($request->wantsJson()) {
-            Appointment::findOrFail($id)->delete();
+        // Envelopa em uma transação para garantir segurança e integridade dos dados
+        DB::transaction(function () use ($id) {
+            // 1. Remove primeiro todos os agendamentos vinculados a este paciente
+            DB::table('appointments')->where('patient_id', $id)->delete();
 
-            return response()->json(null, 204);
-        }
-        */
+            // 2. Remove o registro do paciente na tabela users
+            DB::table('users')->where('id', $id)->where('is_patient', 1)->delete();
+        });
 
-        DB::table('appointments')->where('id', $id)->delete();
-
-        return redirect('/appointments');
+        return redirect('/patients');
     }
 
-    public function dentistAppointments()
+    // Importante: Adicione (Request $request) nos parâmetros do método
+    public function dentistAppointments(Request $request)
     {
-        $user = \Illuminate\Support\Facades\Auth::user();
-        
-        // Busca apenas os agendamentos onde o dentist_id é igual ao ID do usuário logado
-        $appointments = Appointment::with(['patient', 'statu'])
-            ->where('dentist_id', $user->id)
-            ->orderBy('appointment_date', 'asc')
-            ->get();
+        $user = Auth::user();
 
-        return view('dentist-appointments', ['appointments' => $appointments]);
+        // 1. Inicia a query buscando apenas os agendamentos deste dentista
+        $query = Appointment::with(['patient', 'statu'])
+            ->where('dentist_id', $user->id)
+            ->orderBy('appointment_date', 'asc');
+
+        // 2. Se o usuário aplicou o filtro, adiciona a condição na query
+        if ($request->filled('status_id')) {
+            $query->where('status_id', $request->status_id);
+        }
+
+        // 3. Executa a query
+        $appointments = $query->get();
+
+        // 4. Busca todos os status para popular o filtro na tela
+        $statuses = DB::table('status')->get();
+
+        return view('dentist-appointments', [
+            'appointments' => $appointments,
+            'statuses' => $statuses,
+        ]);
     }
 
     public function patientAppointments()
     {
-        $user = \Illuminate\Support\Facades\Auth::user();
-        
-        // Busca apenas os agendamentos onde o patient_id é igual ao ID do usuário logado
+        $user = Auth::user();
+
         $appointments = Appointment::with(['dentist', 'statu'])
             ->where('patient_id', $user->id)
             ->orderBy('appointment_date', 'asc')

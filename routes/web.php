@@ -41,6 +41,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/patients/save', [PatientController::class, 'store']);
     Route::get('/patients/edit/{id}', [PatientController::class, 'edit']);
     Route::post('/patients/update/{id}', [PatientController::class, 'update']);
+    Route::post('/patients/delete/{id}', [PatientController::class, 'destroy']); // <-- NOVA ROTA AQUI
 
     // Dentist CRUD Routes (admin only)
     Route::get('/dentists', [DentistController::class, 'index']);
