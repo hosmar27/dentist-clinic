@@ -62,7 +62,7 @@
 <body>
 
     <main>
-        
+
         @if ($errors->any())
             <div style="background: #f8d7da; color: #721c24; padding: 10px; margin-bottom: 15px; border-radius: 5px; text-align: left;">
                 <ul style="margin: 0; padding-left: 20px;">
@@ -83,7 +83,7 @@
 
             <form action="/login" method="POST">
                 @csrf
-                
+
                 <div class="input-group">
                     <label for="email">E-mail: </label>
                     <input type="email" id="email" name="email" placeholder="example@clinic.com" required>
@@ -96,6 +96,12 @@
 
                 <button type="submit">Login</button>
             </form>
+            <div style="margin-top: 20px; text-align: center; font-size: 14px;">
+                <span style="color: #4a5568;">Don't have an account?</span>
+                <a href="/register" style="color: #2b6cb0; text-decoration: none; font-weight: bold; margin-left: 5px;">
+                    Register here
+                </a>
+            </div>
         </section>
     </main>
 

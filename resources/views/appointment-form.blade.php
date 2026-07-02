@@ -72,9 +72,21 @@
                     </select>
                 @else
                     @php
-                        $currentStatusText = $appointment->statu ? ucfirst($appointment->statu->status_name) : 'Pending / Scheduled';
+                        $statusName = strtolower($appointment->statu->status_name ?? 'scheduled');
+
+                        [$txtColor, $bgColor] = match($statusName) {
+                            'confirmed' => ['#065f46', '#d1fae5'], // Verde
+                            'cancelled' => ['#991b1b', '#fee2e2'], // Vermelho
+                            'completed', 'finished' => ['#0f766e', '#ccfbf1'], // Teal
+                            default => ['#1e40af', '#dbeafe'], // Azul
+                        };
                     @endphp
-                    <input type="text" value="{{ $currentStatusText }}" readonly style="width: 300px; padding: 5px; background-color: #e2e8f0; color: #718096; cursor: not-allowed;">
+
+                    <div style="margin-top: 6px;">
+                        <span style="display: inline-block; padding: 8px 16px; border-radius: 50px; font-size: 0.85rem; font-weight: 700; color: {{ $txtColor }}; background-color: {{ $bgColor }}; text-transform: uppercase; letter-spacing: 0.05em; border: 1px solid rgba(0,0,0,0.05); box-shadow: 0 1px 2px rgba(0,0,0,0.02); cursor: not-allowed;">
+                            {{ ucfirst($appointment->statu->status_name ?? 'Scheduled') }}
+                        </span>
+                    </div>
                 @endif
             </div>
         @endif

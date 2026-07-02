@@ -17,7 +17,7 @@ return new class extends Migration
             $table->string('name');
             $table->string('email')->unique();
             $table->string('birth_date');
-            $table->string('cip');
+            $table->string('cip')->nullable();
             $table->string('cpf')->unique();
             $table->string('phone');
             $table->timestamp('email_verified_at')->nullable();
